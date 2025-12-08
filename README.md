@@ -7,6 +7,10 @@ Supported File Extension: `.jasm`
 
 ### Release Notes
 
+#### 0.0.2
+
+- Added repository field to package.json
+
 #### 0.0.1
 
 - Initial release!
