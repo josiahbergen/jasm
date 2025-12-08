@@ -1,0 +1,64 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Custom ASM",
+    "scopeName": "source.jasm",
+    "patterns": [
+      {
+        "comment": "Comments: ; followed by anything",
+        "match": ";.*$",
+        "name": "comment.line.semicolon.jasm"
+      },
+      {
+        "comment": "Mnemonics (Priority 100)",
+        "match": "\\b(?i)(LOAD|STORE|MOVE|MOV|PUSH|POP|ADD|ADDC|SUB|SUBB|INC|DEC|SHL|SHR|AND|OR|NOR|NOT|XOR|INB|OUTB|CMP|SEC|CLC|CLZ|JMP|JZ|JNZ|JC|JNC|INT|HALT|NOP)\\b",
+        "name": "keyword.control.mnemonic.jasm"
+      },
+      {
+        "comment": "Register Pairs (Priority 90) - Matches 'A:B'",
+        "match": "\\b(?i)(A|B|C|D|X|Y|SP|PC|Z|F|MB|STS):(A|B|C|D|X|Y|SP|PC|Z|F|MB|STS)\\b",
+        "captures": {
+          "1": { "name": "variable.language.register.jasm" },
+          "2": { "name": "variable.language.register.jasm" }
+        },
+        "name": "meta.register.pair.jasm"
+      },
+      {
+        "comment": "Single Registers (Priority 80)",
+        "match": "\\b(?i)(A|B|C|D|X|Y|SP|PC|Z|F|MB|STS)\\b",
+        "name": "variable.language.register.jasm"
+      },
+      {
+        "comment": "Numbers: Hex (Priority 20)",
+        "match": "\\b0[xX][0-9a-fA-F]+\\b",
+        "name": "constant.numeric.hex.jasm"
+      },
+      {
+        "comment": "Numbers: Binary (Priority 20)",
+        "match": "\\b[bB][01]+\\b",
+        "name": "constant.numeric.binary.jasm"
+      },
+      {
+        "comment": "Numbers: Decimal (Priority 20)",
+        "match": "\\b[0-9]+\\b",
+        "name": "constant.numeric.decimal.jasm"
+      },
+      {
+        "comment": "Label Definition (Priority 10) - Matches 'label:' at start of line",
+        "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(:)",
+        "captures": {
+          "1": { "name": "entity.name.function.label.jasm" },
+          "2": { "name": "punctuation.separator.colon.jasm" }
+        }
+      },
+      {
+        "comment": "Label Reference / Operand",
+        "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+        "name": "variable.other.label.jasm"
+      },
+      {
+        "comment": "Separators (commas)",
+        "match": ",",
+        "name": "punctuation.separator.delimiter.jasm"
+      }
+    ]
+  }

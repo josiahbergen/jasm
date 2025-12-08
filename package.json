@@ -1,0 +1,35 @@
+{
+    "name": "jasm-vscode",
+    "displayName": "JASM for VSCode",
+    "description": "Syntax highlighting for the JASM assembly language.",
+    "version": "0.0.1",
+    "publisher": "josiahbergen",
+    "engines": {
+      "vscode": "^1.70.0"
+    },
+    "main": "./extension.js",
+    "activationEvents": [
+      "onLanguage:jasm"
+    ],
+    "categories": [
+      "Programming Languages"
+    ],
+    "contributes": {
+      "languages": [
+        {
+          "id": "jasm",
+          "aliases": ["JASM", "jasm"],
+          "extensions": [".jasm"],
+          "configuration": "./language-configuration.json"
+        }
+      ],
+      "grammars": [
+        {
+          "language": "jasm",
+          "scopeName": "source.jasm",
+          "path": "./syntaxes/jasm.tmLanguage.json"
+        }
+      ]
+    }
+    
+  }
