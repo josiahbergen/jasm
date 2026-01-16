@@ -1,14 +1,22 @@
 const vscode = require('vscode');
 
-// 1. Define the data from your Lark Grammar
+// Updated mnemonics per EBNF
 const MNEMONICS = [
-    'LOAD', 'STORE', 'MOVE', 'PUSH', 'POP', 'ADD', 'ADDC', 'SUB', 'SUBB', 
-    'INC', 'DEC', 'SHL', 'SHR', 'AND', 'OR', 'NOR', 'NOT', 'XOR', 'INB', 'OUTB', 
-    'CMP', 'SEC', 'CLC', 'CLZ', 'JMP', 'JZ', 'JNZ', 'JC', 'JNC', 'INT', 'HALT', 'NOP'
+    'GET', 'PUT', 'MOV', 'PUSH', 'POP', 'ADD', 'ADC', 'SUB', 'SBC', 
+    'INC', 'DEC', 'LSH', 'RSH', 'AND', 'OR', 'NOR', 'NOT', 'XOR', 'INB', 'OUTB', 
+    'CMP', 'JMP', 'JZ', 'JNZ', 'JC', 'JNC', 'CALL', 'RET', 'INT', 'IRET', 'HALT', 'NOP'
 ];
 
 const REGISTERS = [
-    'A', 'B', 'C', 'D', 'X', 'Y', 'SP', 'PC', 'Z', 'F', 'MB', 'STS'
+    'A', 'B', 'C', 'D', 'E', 'X', 'Y', 'PC', 'SP', 'MB', 'F', 'Z'
+];
+
+const DIRECTIVES = [
+    'DATA', 'IMPORT'
+];
+
+const MACRO_KEYWORDS = [
+    'MACRO', 'END MACRO'
 ];
 
 function activate(context) {
@@ -29,6 +37,16 @@ function activate(context) {
                     return new vscode.Location(document.uri, line.range);
                 }
             }
+
+            // Look for macro definitions: "MACRO label_name"
+            const macroDefRegex = new RegExp(`^\\s*(?i)MACRO\\s+${word}\\b`, 'i');
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i);
+                if (macroDefRegex.test(line.text)) {
+                    return new vscode.Location(document.uri, line.range);
+                }
+            }
+
             return null;
         }
     });
@@ -53,8 +71,38 @@ function activate(context) {
                 return item;
             });
 
+            // C. Create completion items for Directives
+            const directiveItems = DIRECTIVES.map(directive => {
+                const item = new vscode.CompletionItem(directive, vscode.CompletionItemKind.Keyword);
+                item.detail = "Directive";
+                if (directive === 'DATA') {
+                    item.documentation = new vscode.MarkdownString(`**DATA** directive: Define data constants\n\nExample: \`DATA 0x10, 0x20, "hello"\``);
+                } else if (directive === 'IMPORT') {
+                    item.documentation = new vscode.MarkdownString(`**IMPORT** directive: Import external module\n\nExample: \`IMPORT "module.jasm"\``);
+                }
+                return item;
+            });
+
+            // D. Create completion items for Macro Keywords
+            const macroItems = MACRO_KEYWORDS.map(keyword => {
+                const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
+                item.detail = "Macro";
+                if (keyword === 'MACRO') {
+                    item.documentation = new vscode.MarkdownString(`**MACRO** keyword: Define a macro\n\nExample: \`MACRO mymacro %arg1, %arg2\``);
+                } else if (keyword === 'END MACRO') {
+                    item.documentation = new vscode.MarkdownString(`**END MACRO** keyword: End macro definition`);
+                }
+                return item;
+            });
+
+            // E. Create completion item for macro argument syntax
+            const macroArgItem = new vscode.CompletionItem('%', vscode.CompletionItemKind.Snippet);
+            macroArgItem.insertText = new vscode.SnippetString('%${1:arg_name}');
+            macroArgItem.detail = "Macro Argument";
+            macroArgItem.documentation = new vscode.MarkdownString(`Macro argument placeholder\n\nUse \`%arg_name\` in macro definitions and calls.`);
+
             // Return all suggestions combined
-            return [ ...mnemonicItems, ...registerItems ];
+            return [ ...mnemonicItems, ...registerItems, ...directiveItems, ...macroItems, macroArgItem ];
         }
     });
 

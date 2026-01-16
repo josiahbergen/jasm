@@ -1,30 +1,69 @@
 {
     "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "Custom ASM",
+    "name": "JASM",
     "scopeName": "source.jasm",
     "patterns": [
       {
-        "comment": "Comments: ; followed by anything",
+        "comment": "Comments: ; followed by anything (must be first to prevent other patterns matching)",
         "match": ";.*$",
         "name": "comment.line.semicolon.jasm"
       },
       {
-        "comment": "Mnemonics (Priority 100)",
-        "match": "\\b(?i)(LOAD|STORE|MOVE|MOV|PUSH|POP|ADD|ADDC|SUB|SUBB|INC|DEC|SHL|SHR|AND|OR|NOR|NOT|XOR|INB|OUTB|CMP|SEC|CLC|CLZ|JMP|JZ|JNZ|JC|JNC|INT|HALT|NOP)\\b",
+        "comment": "String literals",
+        "begin": "\"",
+        "end": "\"",
+        "name": "string.quoted.double.jasm",
+        "patterns": [
+          {
+            "match": "\\\\.",
+            "name": "constant.character.escape.jasm"
+          }
+        ]
+      },
+      {
+        "comment": "Directives: DATA, IMPORT",
+        "match": "\\b(?i)(DATA|IMPORT)\\b",
+        "name": "keyword.control.directive.jasm"
+      },
+      {
+        "comment": "Macro keywords: MACRO, END MACRO",
+        "match": "\\b(?i)(MACRO|END\\s+MACRO)\\b",
+        "name": "keyword.control.macro.jasm"
+      },
+      {
+        "comment": "Macro arguments: %label_name (must come before expressions to avoid % matching as operator)",
+        "match": "(%)([A-Za-z_][A-Za-z0-9_]*)",
+        "captures": {
+          "1": { "name": "punctuation.definition.macro.jasm" },
+          "2": { "name": "variable.parameter.macro.jasm" }
+        },
+        "name": "meta.macro.argument.jasm"
+      },
+      {
+        "comment": "Expressions: ( ... ) with operators",
+        "begin": "\\(",
+        "end": "\\)",
+        "beginCaptures": {
+          "0": { "name": "punctuation.section.expression.begin.jasm" }
+        },
+        "endCaptures": {
+          "0": { "name": "punctuation.section.expression.end.jasm" }
+        },
+        "name": "meta.expression.jasm",
+        "patterns": [
+          {
+            "include": "#expression-content"
+          }
+        ]
+      },
+      {
+        "comment": "Mnemonics (updated per EBNF)",
+        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|INC|DEC|LSH|RSH|AND|OR|NOR|NOT|XOR|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|CALL|RET|INT|IRET|HALT|NOP)\\b",
         "name": "keyword.control.mnemonic.jasm"
       },
       {
-        "comment": "Register Pairs (Priority 90) - Matches 'A:B'",
-        "match": "\\b(?i)(A|B|C|D|X|Y|SP|PC|Z|F|MB|STS):(A|B|C|D|X|Y|SP|PC|Z|F|MB|STS)\\b",
-        "captures": {
-          "1": { "name": "variable.language.register.jasm" },
-          "2": { "name": "variable.language.register.jasm" }
-        },
-        "name": "meta.register.pair.jasm"
-      },
-      {
-        "comment": "Single Registers (Priority 80)",
-        "match": "\\b(?i)(A|B|C|D|X|Y|SP|PC|Z|F|MB|STS)\\b",
+        "comment": "Registers",
+        "match": "\\b(?i)(A|B|C|D|E|X|Y|PC|SP|MB|F|Z)\\b",
         "name": "variable.language.register.jasm"
       },
       {
@@ -33,8 +72,8 @@
         "name": "constant.numeric.hex.jasm"
       },
       {
-        "comment": "Numbers: Binary (Priority 20)",
-        "match": "\\b[bB][01]+\\b",
+        "comment": "Numbers: Binary (Priority 20) - lowercase 'b' prefix",
+        "match": "\\bb[01]+\\b",
         "name": "constant.numeric.binary.jasm"
       },
       {
@@ -60,5 +99,52 @@
         "match": ",",
         "name": "punctuation.separator.delimiter.jasm"
       }
-    ]
+    ],
+    "repository": {
+      "expression-content": {
+        "patterns": [
+          {
+            "comment": "Operators in expressions (exclude % which is for macro args)",
+            "match": "(?i)(\\+|\\-|\\*|/|<<|>>|&|\\||\\^|~)",
+            "name": "keyword.operator.arithmetic.jasm"
+          },
+          {
+            "comment": "Modulo operator (only in expressions, not macro args)",
+            "match": "%(?![A-Za-z_])",
+            "name": "keyword.operator.arithmetic.jasm"
+          },
+          {
+            "comment": "Nested expressions",
+            "begin": "\\(",
+            "end": "\\)",
+            "beginCaptures": {
+              "0": { "name": "punctuation.section.expression.begin.jasm" }
+            },
+            "endCaptures": {
+              "0": { "name": "punctuation.section.expression.end.jasm" }
+            },
+            "name": "meta.expression.jasm",
+            "patterns": [
+              {
+                "include": "#expression-content"
+              }
+            ]
+          },
+          {
+            "comment": "Numbers in expressions",
+            "match": "\\b(0[xX][0-9a-fA-F]+|b[01]+|[0-9]+)\\b",
+            "name": "constant.numeric.jasm"
+          },
+          {
+            "comment": "Macro arguments in expressions",
+            "match": "(%)([A-Za-z_][A-Za-z0-9_]*)",
+            "captures": {
+              "1": { "name": "punctuation.definition.macro.jasm" },
+              "2": { "name": "variable.parameter.macro.jasm" }
+            },
+            "name": "meta.macro.argument.jasm"
+          }
+        ]
+      }
+    }
   }
