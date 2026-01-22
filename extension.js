@@ -19,6 +19,58 @@ const MACRO_KEYWORDS = [
     'MACRO', 'END MACRO'
 ];
 
+// Documentation for mnemonics
+const MNEMONIC_DOCS = {
+    'GET': 'Load data from memory into a register',
+    'PUT': 'Store data from a register into memory',
+    'MOV': 'Move data between registers',
+    'PUSH': 'Push a value onto the stack',
+    'POP': 'Pop a value from the stack',
+    'ADD': 'Add two values',
+    'ADC': 'Add with carry',
+    'SUB': 'Subtract two values',
+    'SBC': 'Subtract with carry',
+    'INC': 'Increment a register',
+    'DEC': 'Decrement a register',
+    'LSH': 'Logical shift left',
+    'RSH': 'Logical shift right',
+    'AND': 'Bitwise AND operation',
+    'OR': 'Bitwise OR operation',
+    'NOR': 'Bitwise NOR operation',
+    'NOT': 'Bitwise NOT operation',
+    'XOR': 'Bitwise XOR operation',
+    'INB': 'Input byte from port',
+    'OUTB': 'Output byte to port',
+    'CMP': 'Compare two values',
+    'JMP': 'Unconditional jump',
+    'JZ': 'Jump if zero flag is set',
+    'JNZ': 'Jump if zero flag is not set',
+    'JC': 'Jump if carry flag is set',
+    'JNC': 'Jump if carry flag is not set',
+    'CALL': 'Call a subroutine',
+    'RET': 'Return from subroutine',
+    'INT': 'Software interrupt',
+    'IRET': 'Return from interrupt',
+    'HALT': 'Halt the processor',
+    'NOP': 'No operation'
+};
+
+// Documentation for registers
+const REGISTER_DOCS = {
+    'A': 'General purpose register A',
+    'B': 'General purpose register B',
+    'C': 'General purpose register C',
+    'D': 'General purpose register D',
+    'E': 'General purpose register E',
+    'X': 'Index register X',
+    'Y': 'Index register Y',
+    'PC': 'Program Counter - points to the next instruction',
+    'SP': 'Stack Pointer - points to the top of the stack',
+    'MB': 'Memory Bank register',
+    'F': 'Flags register',
+    'Z': 'Zero register (always contains 0)'
+};
+
 function activate(context) {
 
     // --- FEATURE 1: GO TO DEFINITION ---
@@ -51,7 +103,74 @@ function activate(context) {
         }
     });
 
-    // --- FEATURE 2: AUTO-COMPLETION ---
+    // --- FEATURE 2: HOVER DOCUMENTATION ---
+    const hoverProvider = vscode.languages.registerHoverProvider('jasm', {
+        provideHover(document, position, token) {
+            const range = document.getWordRangeAtPosition(position);
+            if (!range) return null;
+
+            const word = document.getText(range).toUpperCase();
+
+            // Check if it's a mnemonic
+            if (MNEMONIC_DOCS[word]) {
+                const markdown = new vscode.MarkdownString();
+                markdown.appendMarkdown(`**${word}** - Instruction\n\n`);
+                markdown.appendText(MNEMONIC_DOCS[word]);
+                return new vscode.Hover(markdown, range);
+            }
+
+            // Check if it's a register
+            if (REGISTER_DOCS[word]) {
+                const markdown = new vscode.MarkdownString();
+                markdown.appendMarkdown(`**${word}** - Register\n\n`);
+                markdown.appendText(REGISTER_DOCS[word]);
+                return new vscode.Hover(markdown, range);
+            }
+
+            // Check if it's a directive
+            if (DIRECTIVES.includes(word)) {
+                const markdown = new vscode.MarkdownString();
+                markdown.appendMarkdown(`**${word}** - Directive\n\n`);
+                if (word === 'DATA') {
+                    markdown.appendMarkdown('Define data constants.\n\n');
+                    markdown.appendCodeblock('DATA 0x10, 0x20, "hello"', 'jasm');
+                } else if (word === 'IMPORT') {
+                    markdown.appendMarkdown('Import external module.\n\n');
+                    markdown.appendCodeblock('IMPORT "module.jasm"', 'jasm');
+                }
+                return new vscode.Hover(markdown, range);
+            }
+
+            // Check if it's a label (find its definition) - use original case
+            const originalWord = document.getText(range);
+            const labelDefRegex = new RegExp(`^\\s*${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`, 'i');
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i);
+                if (labelDefRegex.test(line.text)) {
+                    const markdown = new vscode.MarkdownString();
+                    markdown.appendMarkdown(`**${originalWord}** - Label\n\n`);
+                    markdown.appendText(`Defined at line ${i + 1}`);
+                    return new vscode.Hover(markdown, range);
+                }
+            }
+
+            // Check if it's a macro (find its definition) - use original case
+            const macroDefRegex = new RegExp(`^\\s*(?i)MACRO\\s+${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i);
+                if (macroDefRegex.test(line.text)) {
+                    const markdown = new vscode.MarkdownString();
+                    markdown.appendMarkdown(`**${originalWord}** - Macro\n\n`);
+                    markdown.appendText(`Defined at line ${i + 1}`);
+                    return new vscode.Hover(markdown, range);
+                }
+            }
+
+            return null;
+        }
+    });
+
+    // --- FEATURE 3: AUTO-COMPLETION ---
     const completionProvider = vscode.languages.registerCompletionItemProvider('jasm', {
         provideCompletionItems(document, position, token, context) {
             
@@ -106,8 +225,8 @@ function activate(context) {
         }
     });
 
-    // Register both providers
-    context.subscriptions.push(definitionProvider, completionProvider);
+    // Register all providers
+    context.subscriptions.push(definitionProvider, hoverProvider, completionProvider);
 }
 
 function deactivate() {}
