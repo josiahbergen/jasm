@@ -1,14 +1,223 @@
 const vscode = require('vscode');
 
-// Updated mnemonics per EBNF
-const MNEMONICS = [
-    'GET', 'PUT', 'MOV', 'PUSH', 'POP', 'ADD', 'ADC', 'SUB', 'SBC', 
-    'INC', 'DEC', 'LSH', 'RSH', 'AND', 'OR', 'NOR', 'NOT', 'XOR', 'INB', 'OUTB', 
-    'CMP', 'JMP', 'JZ', 'JNZ', 'JC', 'JNC', 'CALL', 'RET', 'INT', 'IRET', 'HALT', 'NOP'
-];
+// Addressing modes reference (name -> short description)
+const ADDRESSING_MODES = {
+    'REGISTER': 'value in register (reg)',
+    'IMMEDIATE': 'immediate value in instruction word (imm16)',
+    'REGISTER INDIRECT': 'at memory location in register ([reg])',
+    'RELATIVE ADDRESS': 'at PC + immediate ([imm16 + pc])',
+    'BASE + OFFSET': 'at immediate + register ([imm16 + reg])'
+};
+
+// Single source of truth: instruction name, description, and forms with operand roles/modes
+const MNEMONIC_INFO = {
+    'HALT': {
+        description: 'Halt the processor',
+        forms: [{ syntax: 'HALT', operands: [] }]
+    },
+    'GET': {
+        description: 'Load data from memory into a register',
+        forms: [
+            { syntax: 'GET reg, [reg]', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER INDIRECT' }] },
+            { syntax: 'GET reg, [pc + imm16]', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'RELATIVE ADDRESS' }] },
+            { syntax: 'GET reg, [imm16 + reg]', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'BASE + OFFSET' }] }
+        ]
+    },
+    'PUT': {
+        description: 'Store data from a register into memory',
+        forms: [
+            { syntax: 'PUT [reg], reg', operands: [{ role: 'dest', mode: 'REGISTER INDIRECT' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'PUT [imm16 + reg], reg', operands: [{ role: 'dest', mode: 'BASE + OFFSET' }, { role: 'src', mode: 'REGISTER' }] }
+        ]
+    },
+    'MOV': {
+        description: 'Move data between registers or load immediate',
+        forms: [
+            { syntax: 'MOV reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'MOV reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'PUSH': {
+        description: 'Push a value onto the stack',
+        forms: [
+            { syntax: 'PUSH reg', operands: [{ role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'PUSH imm16', operands: [{ role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'POP': {
+        description: 'Pop a value from the stack',
+        forms: [{ syntax: 'POP reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
+    },
+    'ADD': {
+        description: 'Add two values',
+        forms: [
+            { syntax: 'ADD reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'ADD reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'ADC': {
+        description: 'Add with carry',
+        forms: [
+            { syntax: 'ADC reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'ADC reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'SUB': {
+        description: 'Subtract two values',
+        forms: [
+            { syntax: 'SUB reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'SUB reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'SBC': {
+        description: 'Subtract with carry',
+        forms: [
+            { syntax: 'SBC reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'SBC reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'INC': {
+        description: 'Increment a register',
+        forms: [{ syntax: 'INC reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
+    },
+    'DEC': {
+        description: 'Decrement a register',
+        forms: [{ syntax: 'DEC reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
+    },
+    'LSH': {
+        description: 'Logical shift left',
+        forms: [
+            { syntax: 'LSH reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'LSH reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'RSH': {
+        description: 'Logical shift right',
+        forms: [
+            { syntax: 'RSH reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'RSH reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'AND': {
+        description: 'Bitwise AND operation',
+        forms: [
+            { syntax: 'AND reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'AND reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'OR': {
+        description: 'Bitwise OR operation',
+        forms: [
+            { syntax: 'OR reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'OR reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'NOT': {
+        description: 'Bitwise NOT operation',
+        forms: [{ syntax: 'NOT reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
+    },
+    'XOR': {
+        description: 'Bitwise XOR operation',
+        forms: [
+            { syntax: 'XOR reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'XOR reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'INB': {
+        description: 'Input byte from port',
+        forms: [
+            { syntax: 'INB reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'INB reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'OUTB': {
+        description: 'Output byte to port',
+        forms: [
+            { syntax: 'OUTB reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'OUTB reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'CMP': {
+        description: 'Compare two values',
+        forms: [
+            { syntax: 'CMP reg, reg', operands: [{ role: 'src', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'CMP reg, imm16', operands: [{ role: 'src', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'JMP': {
+        description: 'Unconditional jump',
+        forms: [
+            { syntax: 'JMP reg', operands: [{ role: 'target', mode: 'REGISTER' }] },
+            { syntax: 'JMP imm16', operands: [{ role: 'target', mode: 'IMMEDIATE' }] },
+            { syntax: 'JMP [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] },
+            { syntax: 'JMP [imm16 + reg]', operands: [{ role: 'target', mode: 'BASE + OFFSET' }] }
+        ]
+    },
+    'JZ': {
+        description: 'Jump if zero flag is set',
+        forms: [{ syntax: 'JZ [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JNZ': {
+        description: 'Jump if zero flag is not set',
+        forms: [{ syntax: 'JNZ [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JC': {
+        description: 'Jump if carry flag is set',
+        forms: [{ syntax: 'JC [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JNC': {
+        description: 'Jump if carry flag is not set',
+        forms: [{ syntax: 'JNC [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JN': {
+        description: 'Jump if negative flag is set',
+        forms: [{ syntax: 'JN [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JNN': {
+        description: 'Jump if negative flag is not set',
+        forms: [{ syntax: 'JNN [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JO': {
+        description: 'Jump if overflow flag is set',
+        forms: [{ syntax: 'JO [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'JNO': {
+        description: 'Jump if overflow flag is not set',
+        forms: [{ syntax: 'JNO [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
+    },
+    'CALL': {
+        description: 'Call a subroutine',
+        forms: [
+            { syntax: 'CALL reg', operands: [{ role: 'target', mode: 'REGISTER' }] },
+            { syntax: 'CALL imm16', operands: [{ role: 'target', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'RET': {
+        description: 'Return from subroutine',
+        forms: [{ syntax: 'RET', operands: [] }]
+    },
+    'INT': {
+        description: 'Software interrupt',
+        forms: [
+            { syntax: 'INT reg', operands: [{ role: 'src', mode: 'REGISTER' }] },
+            { syntax: 'INT imm16', operands: [{ role: 'src', mode: 'IMMEDIATE' }] }
+        ]
+    },
+    'IRET': {
+        description: 'Return from interrupt',
+        forms: [{ syntax: 'IRET', operands: [] }]
+    },
+    'NOP': {
+        description: 'No operation',
+        forms: [{ syntax: 'NOP', operands: [] }]
+    }
+};
+
+// Derive MNEMONICS from MNEMONIC_INFO (single source of truth)
+const MNEMONICS = Object.keys(MNEMONIC_INFO);
 
 const REGISTERS = [
-    'A', 'B', 'C', 'D', 'E', 'X', 'Y', 'PC', 'SP', 'MB', 'F', 'Z'
+    'A', 'B', 'C', 'D', 'E', 'X', 'Y', 'Z', 'F', 'PC', 'SP', 'MB', 
 ];
 
 const DIRECTIVES = [
@@ -19,41 +228,18 @@ const MACRO_KEYWORDS = [
     'MACRO', 'END MACRO'
 ];
 
-// Documentation for mnemonics
-const MNEMONIC_DOCS = {
-    'GET': 'Load data from memory into a register',
-    'PUT': 'Store data from a register into memory',
-    'MOV': 'Move data between registers',
-    'PUSH': 'Push a value onto the stack',
-    'POP': 'Pop a value from the stack',
-    'ADD': 'Add two values',
-    'ADC': 'Add with carry',
-    'SUB': 'Subtract two values',
-    'SBC': 'Subtract with carry',
-    'INC': 'Increment a register',
-    'DEC': 'Decrement a register',
-    'LSH': 'Logical shift left',
-    'RSH': 'Logical shift right',
-    'AND': 'Bitwise AND operation',
-    'OR': 'Bitwise OR operation',
-    'NOR': 'Bitwise NOR operation',
-    'NOT': 'Bitwise NOT operation',
-    'XOR': 'Bitwise XOR operation',
-    'INB': 'Input byte from port',
-    'OUTB': 'Output byte to port',
-    'CMP': 'Compare two values',
-    'JMP': 'Unconditional jump',
-    'JZ': 'Jump if zero flag is set',
-    'JNZ': 'Jump if zero flag is not set',
-    'JC': 'Jump if carry flag is set',
-    'JNC': 'Jump if carry flag is not set',
-    'CALL': 'Call a subroutine',
-    'RET': 'Return from subroutine',
-    'INT': 'Software interrupt',
-    'IRET': 'Return from interrupt',
-    'HALT': 'Halt the processor',
-    'NOP': 'No operation'
-};
+/** Build markdown content for a mnemonic (hover or completion docs) */
+function buildMnemonicMarkdown(mnemonic) {
+    const info = MNEMONIC_INFO[mnemonic];
+    if (!info) return null;
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`${mnemonic}: ${info.description}\n\n`);
+    md.appendMarkdown('Usage:\n');
+    for (const form of info.forms) {
+        md.appendCodeblock(form.syntax, 'jasm');
+    }
+    return md;
+}
 
 // Documentation for registers
 const REGISTER_DOCS = {
@@ -64,11 +250,11 @@ const REGISTER_DOCS = {
     'E': 'General purpose register E',
     'X': 'Index register X',
     'Y': 'Index register Y',
+    'Z': 'Index register Z',
     'PC': 'Program Counter - points to the next instruction',
     'SP': 'Stack Pointer - points to the top of the stack',
     'MB': 'Memory Bank register',
     'F': 'Flags register',
-    'Z': 'Zero register (always contains 0)'
 };
 
 function activate(context) {
@@ -112,17 +298,14 @@ function activate(context) {
             const word = document.getText(range).toUpperCase();
 
             // Check if it's a mnemonic
-            if (MNEMONIC_DOCS[word]) {
-                const markdown = new vscode.MarkdownString();
-                markdown.appendMarkdown(`**${word}** - Instruction\n\n`);
-                markdown.appendText(MNEMONIC_DOCS[word]);
-                return new vscode.Hover(markdown, range);
+            if (MNEMONIC_INFO[word]) {
+                const markdown = buildMnemonicMarkdown(word);
+                if (markdown) return new vscode.Hover(markdown, range);
             }
 
             // Check if it's a register
             if (REGISTER_DOCS[word]) {
                 const markdown = new vscode.MarkdownString();
-                markdown.appendMarkdown(`**${word}** - Register\n\n`);
                 markdown.appendText(REGISTER_DOCS[word]);
                 return new vscode.Hover(markdown, range);
             }
@@ -130,7 +313,6 @@ function activate(context) {
             // Check if it's a directive
             if (DIRECTIVES.includes(word)) {
                 const markdown = new vscode.MarkdownString();
-                markdown.appendMarkdown(`**${word}** - Directive\n\n`);
                 if (word === 'DATA') {
                     markdown.appendMarkdown('Define data constants.\n\n');
                     markdown.appendCodeblock('DATA 0x10, 0x20, "hello"', 'jasm');
@@ -148,20 +330,7 @@ function activate(context) {
                 const line = document.lineAt(i);
                 if (labelDefRegex.test(line.text)) {
                     const markdown = new vscode.MarkdownString();
-                    markdown.appendMarkdown(`**${originalWord}** - Label\n\n`);
-                    markdown.appendText(`Defined at line ${i + 1}`);
-                    return new vscode.Hover(markdown, range);
-                }
-            }
-
-            // Check if it's a macro (find its definition) - use original case
-            const macroDefRegex = new RegExp(`^\\s*(?i)MACRO\\s+${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-            for (let i = 0; i < document.lineCount; i++) {
-                const line = document.lineAt(i);
-                if (macroDefRegex.test(line.text)) {
-                    const markdown = new vscode.MarkdownString();
-                    markdown.appendMarkdown(`**${originalWord}** - Macro\n\n`);
-                    markdown.appendText(`Defined at line ${i + 1}`);
+                    markdown.appendText(`${originalWord}: defined at line ${i + 1}`);
                     return new vscode.Hover(markdown, range);
                 }
             }
@@ -178,7 +347,7 @@ function activate(context) {
             const mnemonicItems = MNEMONICS.map(mnemonic => {
                 const item = new vscode.CompletionItem(mnemonic, vscode.CompletionItemKind.Keyword);
                 item.detail = "Instruction";
-                item.documentation = new vscode.MarkdownString(`Insert **${mnemonic}** instruction.`);
+                item.documentation = buildMnemonicMarkdown(mnemonic) || new vscode.MarkdownString(`Insert **${mnemonic}** instruction.`);
                 return item;
             });
 

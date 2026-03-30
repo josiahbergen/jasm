@@ -2,7 +2,7 @@
     "name": "jasm-vscode",
     "displayName": "JASM for VSCode",
     "description": "Syntax highlighting and IntelliSense for the JASM assembly language.",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "publisher": "josiahbergen",
     "repository": {
       "type": "git",

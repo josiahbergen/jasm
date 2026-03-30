@@ -57,9 +57,26 @@
         ]
       },
       {
-        "comment": "Mnemonics (updated per EBNF)",
-        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|INC|DEC|LSH|RSH|AND|OR|NOR|NOT|XOR|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|CALL|RET|INT|IRET|HALT|NOP)\\b",
+        "comment": "Mnemonics (updated per language spec)",
+        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|INC|DEC|LSH|RSH|AND|OR|NOT|XOR|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|JN|JNN|JO|JNO|CALL|RET|INT|IRET|HALT|NOP)\\b",
         "name": "keyword.control.mnemonic.jasm"
+      },
+      {
+        "comment": "Memory operands: [reg], [pc + imm16], [imm16 + reg]",
+        "begin": "\\[",
+        "end": "\\]",
+        "beginCaptures": {
+          "0": { "name": "punctuation.section.memory.begin.jasm" }
+        },
+        "endCaptures": {
+          "0": { "name": "punctuation.section.memory.end.jasm" }
+        },
+        "name": "meta.memory.operand.jasm",
+        "patterns": [
+          {
+            "include": "#memory-operand-content"
+          }
+        ]
       },
       {
         "comment": "Registers",
@@ -101,6 +118,30 @@
       }
     ],
     "repository": {
+      "memory-operand-content": {
+        "patterns": [
+          {
+            "comment": "Registers inside memory operand",
+            "match": "\\b(?i)(A|B|C|D|E|X|Y|PC|SP|MB|F|Z)\\b",
+            "name": "variable.language.register.jasm"
+          },
+          {
+            "comment": "Plus in address expression",
+            "match": "\\+",
+            "name": "keyword.operator.arithmetic.jasm"
+          },
+          {
+            "comment": "Numbers in memory operand",
+            "match": "\\b(0[xX][0-9a-fA-F]+|b[01]+|[0-9]+)\\b",
+            "name": "constant.numeric.jasm"
+          },
+          {
+            "comment": "Label or identifier in memory operand",
+            "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+            "name": "variable.other.label.jasm"
+          }
+        ]
+      },
       "expression-content": {
         "patterns": [
           {
