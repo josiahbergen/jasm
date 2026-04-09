@@ -1,286 +1,153 @@
 const vscode = require('vscode');
 
-// Addressing modes reference (name -> short description)
-const ADDRESSING_MODES = {
-    'REGISTER': 'value in register (reg)',
-    'IMMEDIATE': 'immediate value in instruction word (imm16)',
-    'REGISTER INDIRECT': 'at memory location in register ([reg])',
-    'RELATIVE ADDRESS': 'at PC + immediate ([imm16 + pc])',
-    'BASE + OFFSET': 'at immediate + register ([imm16 + reg])'
-};
-
-// Single source of truth: instruction name, description, and forms with operand roles/modes
 const MNEMONIC_INFO = {
-    'HALT': {
-        description: 'Halt the processor',
-        forms: [{ syntax: 'HALT', operands: [] }]
-    },
-    'GET': {
-        description: 'Load data from memory into a register',
-        forms: [
-            { syntax: 'GET reg, [reg]', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER INDIRECT' }] },
-            { syntax: 'GET reg, [pc + imm16]', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'RELATIVE ADDRESS' }] },
-            { syntax: 'GET reg, [imm16 + reg]', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'BASE + OFFSET' }] }
-        ]
-    },
-    'PUT': {
-        description: 'Store data from a register into memory',
-        forms: [
-            { syntax: 'PUT [reg], reg', operands: [{ role: 'dest', mode: 'REGISTER INDIRECT' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'PUT [imm16 + reg], reg', operands: [{ role: 'dest', mode: 'BASE + OFFSET' }, { role: 'src', mode: 'REGISTER' }] }
-        ]
-    },
-    'MOV': {
-        description: 'Move data between registers or load immediate',
-        forms: [
-            { syntax: 'MOV reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'MOV reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'PUSH': {
-        description: 'Push a value onto the stack',
-        forms: [
-            { syntax: 'PUSH reg', operands: [{ role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'PUSH imm16', operands: [{ role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'POP': {
-        description: 'Pop a value from the stack',
-        forms: [{ syntax: 'POP reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
-    },
-    'ADD': {
-        description: 'Add two values',
-        forms: [
-            { syntax: 'ADD reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'ADD reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'ADC': {
-        description: 'Add with carry',
-        forms: [
-            { syntax: 'ADC reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'ADC reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'SUB': {
-        description: 'Subtract two values',
-        forms: [
-            { syntax: 'SUB reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'SUB reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'SBC': {
-        description: 'Subtract with carry',
-        forms: [
-            { syntax: 'SBC reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'SBC reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'INC': {
-        description: 'Increment a register',
-        forms: [{ syntax: 'INC reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
-    },
-    'DEC': {
-        description: 'Decrement a register',
-        forms: [{ syntax: 'DEC reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
-    },
-    'LSH': {
-        description: 'Logical shift left',
-        forms: [
-            { syntax: 'LSH reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'LSH reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'RSH': {
-        description: 'Logical shift right',
-        forms: [
-            { syntax: 'RSH reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'RSH reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'AND': {
-        description: 'Bitwise AND operation',
-        forms: [
-            { syntax: 'AND reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'AND reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'OR': {
-        description: 'Bitwise OR operation',
-        forms: [
-            { syntax: 'OR reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'OR reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'NOT': {
-        description: 'Bitwise NOT operation',
-        forms: [{ syntax: 'NOT reg', operands: [{ role: 'dest', mode: 'REGISTER' }] }]
-    },
-    'XOR': {
-        description: 'Bitwise XOR operation',
-        forms: [
-            { syntax: 'XOR reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'XOR reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'INB': {
-        description: 'Input byte from port',
-        forms: [
-            { syntax: 'INB reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'INB reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'OUTB': {
-        description: 'Output byte to port',
-        forms: [
-            { syntax: 'OUTB reg, reg', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'OUTB reg, imm16', operands: [{ role: 'dest', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'CMP': {
-        description: 'Compare two values',
-        forms: [
-            { syntax: 'CMP reg, reg', operands: [{ role: 'src', mode: 'REGISTER' }, { role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'CMP reg, imm16', operands: [{ role: 'src', mode: 'REGISTER' }, { role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'JMP': {
-        description: 'Unconditional jump',
-        forms: [
-            { syntax: 'JMP reg', operands: [{ role: 'target', mode: 'REGISTER' }] },
-            { syntax: 'JMP imm16', operands: [{ role: 'target', mode: 'IMMEDIATE' }] },
-            { syntax: 'JMP [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] },
-            { syntax: 'JMP [imm16 + reg]', operands: [{ role: 'target', mode: 'BASE + OFFSET' }] }
-        ]
-    },
-    'JZ': {
-        description: 'Jump if zero flag is set',
-        forms: [{ syntax: 'JZ [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JNZ': {
-        description: 'Jump if zero flag is not set',
-        forms: [{ syntax: 'JNZ [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JC': {
-        description: 'Jump if carry flag is set',
-        forms: [{ syntax: 'JC [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JNC': {
-        description: 'Jump if carry flag is not set',
-        forms: [{ syntax: 'JNC [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JN': {
-        description: 'Jump if negative flag is set',
-        forms: [{ syntax: 'JN [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JNN': {
-        description: 'Jump if negative flag is not set',
-        forms: [{ syntax: 'JNN [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JO': {
-        description: 'Jump if overflow flag is set',
-        forms: [{ syntax: 'JO [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'JNO': {
-        description: 'Jump if overflow flag is not set',
-        forms: [{ syntax: 'JNO [pc + imm16]', operands: [{ role: 'target', mode: 'RELATIVE ADDRESS' }] }]
-    },
-    'CALL': {
-        description: 'Call a subroutine',
-        forms: [
-            { syntax: 'CALL reg', operands: [{ role: 'target', mode: 'REGISTER' }] },
-            { syntax: 'CALL imm16', operands: [{ role: 'target', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'RET': {
-        description: 'Return from subroutine',
-        forms: [{ syntax: 'RET', operands: [] }]
-    },
-    'INT': {
-        description: 'Software interrupt',
-        forms: [
-            { syntax: 'INT reg', operands: [{ role: 'src', mode: 'REGISTER' }] },
-            { syntax: 'INT imm16', operands: [{ role: 'src', mode: 'IMMEDIATE' }] }
-        ]
-    },
-    'IRET': {
-        description: 'Return from interrupt',
-        forms: [{ syntax: 'IRET', operands: [] }]
-    },
-    'NOP': {
-        description: 'No operation',
-        forms: [{ syntax: 'NOP', operands: [] }]
-    }
+    HALT: { summary: 'Stop execution.', forms: ['HALT'] },
+    NOP: { summary: 'No operation.', forms: ['NOP'] },
+    GET: { summary: 'Load from memory.', forms: ['GET reg, [reg]'] },
+    PUT: { summary: 'Store to memory.', forms: ['PUT [reg], reg', 'PUT [reg], imm16'] },
+    MOV: { summary: 'Move a value into a register.', forms: ['MOV reg, reg', 'MOV reg, imm16'] },
+    PUSH: { summary: 'Push onto the stack.', forms: ['PUSH reg', 'PUSH imm16'] },
+    POP: { summary: 'Pop from the stack.', forms: ['POP reg'] },
+    ADD: { summary: 'Add.', forms: ['ADD reg, reg', 'ADD reg, imm16'] },
+    ADC: { summary: 'Add with carry.', forms: ['ADC reg, reg', 'ADC reg, imm16'] },
+    SUB: { summary: 'Subtract.', forms: ['SUB reg, reg', 'SUB reg, imm16'] },
+    SBC: { summary: 'Subtract with carry.', forms: ['SBC reg, reg', 'SBC reg, imm16'] },
+    MUL: { summary: 'Multiply.', forms: ['MUL reg, reg', 'MUL reg, imm16'] },
+    MOD: { summary: 'Modulo.', forms: ['MOD reg, reg', 'MOD reg, imm16'] },
+    DIV: { summary: 'Divide.', forms: ['DIV reg, reg', 'DIV reg, imm16'] },
+    INC: { summary: 'Increment.', forms: ['INC reg'] },
+    DEC: { summary: 'Decrement.', forms: ['DEC reg'] },
+    LSH: { summary: 'Logical shift left.', forms: ['LSH reg, reg', 'LSH reg, imm16'] },
+    RSH: { summary: 'Logical shift right.', forms: ['RSH reg, reg', 'RSH reg, imm16'] },
+    ASR: { summary: 'Arithmetic shift right.', forms: ['ASR reg, reg', 'ASR reg, imm16'] },
+    AND: { summary: 'Bitwise AND.', forms: ['AND reg, reg', 'AND reg, imm16'] },
+    OR: { summary: 'Bitwise OR.', forms: ['OR reg, reg', 'OR reg, imm16'] },
+    NOT: { summary: 'Bitwise NOT.', forms: ['NOT reg'] },
+    XOR: { summary: 'Bitwise XOR.', forms: ['XOR reg, reg', 'XOR reg, imm16'] },
+    SWP: { summary: 'Swap register values.', forms: ['SWP reg, reg'] },
+    STI: { summary: 'Set interrupt enable.', forms: ['STI'] },
+    CLI: { summary: 'Clear interrupt enable.', forms: ['CLI'] },
+    STC: { summary: 'Set carry flag.', forms: ['STC'] },
+    CLC: { summary: 'Clear carry flag.', forms: ['CLC'] },
+    INB: { summary: 'Read a byte from a port.', forms: ['INB reg, reg', 'INB reg, imm16'] },
+    OUTB: { summary: 'Write a byte to a port.', forms: ['OUTB reg, reg', 'OUTB imm16, reg'] },
+    CMP: { summary: 'Compare values.', forms: ['CMP reg, reg', 'CMP reg, imm16'] },
+    JMP: { summary: 'Jump.', forms: ['JMP reg', 'JMP imm16'] },
+    JZ: { summary: 'Jump if zero.', forms: ['JZ label'] },
+    JNZ: { summary: 'Jump if not zero.', forms: ['JNZ label'] },
+    JC: { summary: 'Jump if carry.', forms: ['JC label'] },
+    JNC: { summary: 'Jump if not carry.', forms: ['JNC label'] },
+    JA: { summary: 'Jump if above.', forms: ['JA label'] },
+    JAE: { summary: 'Jump if above or equal.', forms: ['JAE label'] },
+    JB: { summary: 'Jump if below.', forms: ['JB label'] },
+    JBE: { summary: 'Jump if below or equal.', forms: ['JBE label'] },
+    JG: { summary: 'Jump if greater.', forms: ['JG label'] },
+    JGE: { summary: 'Jump if greater or equal.', forms: ['JGE label'] },
+    JL: { summary: 'Jump if less.', forms: ['JL label'] },
+    JLE: { summary: 'Jump if less or equal.', forms: ['JLE label'] },
+    CALL: { summary: 'Call a subroutine.', forms: ['CALL reg', 'CALL imm16'] },
+    RET: { summary: 'Return from subroutine.', forms: ['RET'] },
+    INT: { summary: 'Software interrupt.', forms: ['INT reg', 'INT imm16'] },
+    IRET: { summary: 'Return from interrupt.', forms: ['IRET'] }
 };
 
-// Derive MNEMONICS from MNEMONIC_INFO (single source of truth)
 const MNEMONICS = Object.keys(MNEMONIC_INFO);
 
 const REGISTERS = [
-    'A', 'B', 'C', 'D', 'E', 'X', 'Y', 'Z', 'F', 'PC', 'SP', 'MB', 
+    'A', 'B', 'C', 'D', 'E', 'X', 'Y', 'Z', 'F', 'PC', 'SP', 'MB'
 ];
 
-const DIRECTIVES = [
-    'DATA', 'IMPORT'
-];
+const DIRECTIVE_INFO = {
+    DATA: {
+        summary: 'Inline data words or strings.',
+        forms: ['DATA 0x1111', 'DATA "hello", 0', 'DATA other_label']
+    },
+    IMPORT: {
+        summary: 'Include another JASM source file.',
+        forms: ['IMPORT "libs/string.jasm"']
+    },
+    DEFINE: {
+        summary: 'Define a numeric constant.',
+        forms: ['DEFINE vram_start 0x1000']
+    },
+    TIMES: {
+        summary: 'Repeat a value for a number of words.',
+        forms: ['TIMES 512, 0x0000']
+    },
+    ALIGN: {
+        summary: 'Pad with zeros to an alignment boundary.',
+        forms: ['ALIGN 0x200']
+    },
+    ORG: {
+        summary: 'Set the origin for label resolution.',
+        forms: ['ORG 0x200']
+    }
+};
 
-const MACRO_KEYWORDS = [
-    'MACRO', 'END MACRO'
-];
+const DIRECTIVES = Object.keys(DIRECTIVE_INFO);
 
-/** Build markdown content for a mnemonic (hover or completion docs) */
-function buildMnemonicMarkdown(mnemonic) {
-    const info = MNEMONIC_INFO[mnemonic];
-    if (!info) return null;
+const MACRO_KEYWORDS = ['MACRO', 'END MACRO'];
+
+const REGISTER_DOCS = {
+    A: 'General-purpose register.',
+    B: 'General-purpose register.',
+    C: 'General-purpose register.',
+    D: 'General-purpose register.',
+    E: 'General-purpose register.',
+    X: 'General-purpose register.',
+    Y: 'General-purpose register.',
+    Z: 'General-purpose register.',
+    PC: 'Program counter.',
+    SP: 'Stack pointer.',
+    MB: 'Memory bank register.',
+    F: 'Flags register.'
+};
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildSyntaxMarkdown(title, summary, forms) {
     const md = new vscode.MarkdownString();
-    md.appendMarkdown(`${mnemonic}: ${info.description}\n\n`);
-    md.appendMarkdown('Usage:\n');
-    for (const form of info.forms) {
-        md.appendCodeblock(form.syntax, 'jasm');
+    md.appendMarkdown(`**${title}**`);
+    if (summary) {
+        md.appendMarkdown(` - ${summary}`);
+    }
+    if (forms.length > 0) {
+        md.appendMarkdown('\n\n');
+        for (const form of forms) {
+            md.appendCodeblock(form, 'jasm');
+        }
     }
     return md;
 }
 
-// Documentation for registers
-const REGISTER_DOCS = {
-    'A': 'General purpose register A',
-    'B': 'General purpose register B',
-    'C': 'General purpose register C',
-    'D': 'General purpose register D',
-    'E': 'General purpose register E',
-    'X': 'Index register X',
-    'Y': 'Index register Y',
-    'Z': 'Index register Z',
-    'PC': 'Program Counter - points to the next instruction',
-    'SP': 'Stack Pointer - points to the top of the stack',
-    'MB': 'Memory Bank register',
-    'F': 'Flags register',
-};
+function buildMnemonicMarkdown(mnemonic) {
+    const info = MNEMONIC_INFO[mnemonic];
+    return info ? buildSyntaxMarkdown(mnemonic, info.summary, info.forms) : null;
+}
+
+function buildDirectiveMarkdown(directive) {
+    const info = DIRECTIVE_INFO[directive];
+    return info ? buildSyntaxMarkdown(directive, info.summary, info.forms) : null;
+}
 
 function activate(context) {
-
-    // --- FEATURE 1: GO TO DEFINITION ---
     const definitionProvider = vscode.languages.registerDefinitionProvider('jasm', {
-        provideDefinition(document, position, token) {
+        provideDefinition(document, position) {
             const range = document.getWordRangeAtPosition(position);
+            if (!range) {
+                return null;
+            }
+
             const word = document.getText(range);
-            if (!word) return null;
-
-            // Look for "LABEL:" at the start of a line
-            const labelDefRegex = new RegExp(`^\\s*${word}\\s*:`, 'i');
+            const escapedWord = escapeRegExp(word);
+            const labelDefRegex = new RegExp(`^\\s*${escapedWord}\\s*:`, 'i');
+            const macroDefRegex = new RegExp(`^\\s*MACRO\\s+${escapedWord}\\b`, 'i');
 
             for (let i = 0; i < document.lineCount; i++) {
                 const line = document.lineAt(i);
-                if (labelDefRegex.test(line.text)) {
-                    return new vscode.Location(document.uri, line.range);
-                }
-            }
-
-            // Look for macro definitions: "MACRO label_name"
-            const macroDefRegex = new RegExp(`^\\s*(?i)MACRO\\s+${word}\\b`, 'i');
-            for (let i = 0; i < document.lineCount; i++) {
-                const line = document.lineAt(i);
-                if (macroDefRegex.test(line.text)) {
+                if (labelDefRegex.test(line.text) || macroDefRegex.test(line.text)) {
                     return new vscode.Location(document.uri, line.range);
                 }
             }
@@ -289,49 +156,33 @@ function activate(context) {
         }
     });
 
-    // --- FEATURE 2: HOVER DOCUMENTATION ---
     const hoverProvider = vscode.languages.registerHoverProvider('jasm', {
-        provideHover(document, position, token) {
+        provideHover(document, position) {
             const range = document.getWordRangeAtPosition(position);
-            if (!range) return null;
-
-            const word = document.getText(range).toUpperCase();
-
-            // Check if it's a mnemonic
-            if (MNEMONIC_INFO[word]) {
-                const markdown = buildMnemonicMarkdown(word);
-                if (markdown) return new vscode.Hover(markdown, range);
+            if (!range) {
+                return null;
             }
 
-            // Check if it's a register
-            if (REGISTER_DOCS[word]) {
-                const markdown = new vscode.MarkdownString();
-                markdown.appendText(REGISTER_DOCS[word]);
-                return new vscode.Hover(markdown, range);
-            }
-
-            // Check if it's a directive
-            if (DIRECTIVES.includes(word)) {
-                const markdown = new vscode.MarkdownString();
-                if (word === 'DATA') {
-                    markdown.appendMarkdown('Define data constants.\n\n');
-                    markdown.appendCodeblock('DATA 0x10, 0x20, "hello"', 'jasm');
-                } else if (word === 'IMPORT') {
-                    markdown.appendMarkdown('Import external module.\n\n');
-                    markdown.appendCodeblock('IMPORT "module.jasm"', 'jasm');
-                }
-                return new vscode.Hover(markdown, range);
-            }
-
-            // Check if it's a label (find its definition) - use original case
             const originalWord = document.getText(range);
-            const labelDefRegex = new RegExp(`^\\s*${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`, 'i');
+            const word = originalWord.toUpperCase();
+
+            if (MNEMONIC_INFO[word]) {
+                return new vscode.Hover(buildMnemonicMarkdown(word), range);
+            }
+
+            if (DIRECTIVE_INFO[word]) {
+                return new vscode.Hover(buildDirectiveMarkdown(word), range);
+            }
+
+            if (REGISTER_DOCS[word]) {
+                return new vscode.Hover(new vscode.MarkdownString(REGISTER_DOCS[word]), range);
+            }
+
+            const labelDefRegex = new RegExp(`^\\s*${escapeRegExp(originalWord)}\\s*:`, 'i');
             for (let i = 0; i < document.lineCount; i++) {
                 const line = document.lineAt(i);
                 if (labelDefRegex.test(line.text)) {
-                    const markdown = new vscode.MarkdownString();
-                    markdown.appendText(`${originalWord}: defined at line ${i + 1}`);
-                    return new vscode.Hover(markdown, range);
+                    return new vscode.Hover(new vscode.MarkdownString(`Defined on line ${i + 1}.`), range);
                 }
             }
 
@@ -339,62 +190,53 @@ function activate(context) {
         }
     });
 
-    // --- FEATURE 3: AUTO-COMPLETION ---
     const completionProvider = vscode.languages.registerCompletionItemProvider('jasm', {
-        provideCompletionItems(document, position, token, context) {
-            
-            // A. Create completion items for Mnemonics (Instructions)
-            const mnemonicItems = MNEMONICS.map(mnemonic => {
+        provideCompletionItems() {
+            const mnemonicItems = MNEMONICS.map((mnemonic) => {
                 const item = new vscode.CompletionItem(mnemonic, vscode.CompletionItemKind.Keyword);
-                item.detail = "Instruction";
-                item.documentation = buildMnemonicMarkdown(mnemonic) || new vscode.MarkdownString(`Insert **${mnemonic}** instruction.`);
+                item.detail = 'Instruction';
+                item.documentation = buildMnemonicMarkdown(mnemonic);
                 return item;
             });
 
-            // B. Create completion items for Registers
-            const registerItems = REGISTERS.map(reg => {
-                const item = new vscode.CompletionItem(reg, vscode.CompletionItemKind.Variable);
-                item.detail = "Register";
-                item.documentation = new vscode.MarkdownString(`Register **${reg}**`);
+            const registerItems = REGISTERS.map((register) => {
+                const item = new vscode.CompletionItem(register, vscode.CompletionItemKind.Variable);
+                item.detail = 'Register';
+                item.documentation = new vscode.MarkdownString(REGISTER_DOCS[register]);
                 return item;
             });
 
-            // C. Create completion items for Directives
-            const directiveItems = DIRECTIVES.map(directive => {
+            const directiveItems = DIRECTIVES.map((directive) => {
                 const item = new vscode.CompletionItem(directive, vscode.CompletionItemKind.Keyword);
-                item.detail = "Directive";
-                if (directive === 'DATA') {
-                    item.documentation = new vscode.MarkdownString(`**DATA** directive: Define data constants\n\nExample: \`DATA 0x10, 0x20, "hello"\``);
-                } else if (directive === 'IMPORT') {
-                    item.documentation = new vscode.MarkdownString(`**IMPORT** directive: Import external module\n\nExample: \`IMPORT "module.jasm"\``);
-                }
+                item.detail = 'Directive';
+                item.documentation = buildDirectiveMarkdown(directive);
                 return item;
             });
 
-            // D. Create completion items for Macro Keywords
-            const macroItems = MACRO_KEYWORDS.map(keyword => {
+            const macroItems = MACRO_KEYWORDS.map((keyword) => {
                 const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
-                item.detail = "Macro";
-                if (keyword === 'MACRO') {
-                    item.documentation = new vscode.MarkdownString(`**MACRO** keyword: Define a macro\n\nExample: \`MACRO mymacro %arg1, %arg2\``);
-                } else if (keyword === 'END MACRO') {
-                    item.documentation = new vscode.MarkdownString(`**END MACRO** keyword: End macro definition`);
-                }
+                item.detail = 'Macro';
+                item.documentation = keyword === 'MACRO'
+                    ? buildSyntaxMarkdown('MACRO', 'Define a macro.', ['MACRO name %arg1, %arg2', 'END MACRO'])
+                    : new vscode.MarkdownString('**END MACRO**');
                 return item;
             });
 
-            // E. Create completion item for macro argument syntax
             const macroArgItem = new vscode.CompletionItem('%', vscode.CompletionItemKind.Snippet);
-            macroArgItem.insertText = new vscode.SnippetString('%${1:arg_name}');
-            macroArgItem.detail = "Macro Argument";
-            macroArgItem.documentation = new vscode.MarkdownString(`Macro argument placeholder\n\nUse \`%arg_name\` in macro definitions and calls.`);
+            macroArgItem.insertText = new vscode.SnippetString('%${1:name}');
+            macroArgItem.detail = 'Macro Argument';
+            macroArgItem.documentation = new vscode.MarkdownString('`%name`');
 
-            // Return all suggestions combined
-            return [ ...mnemonicItems, ...registerItems, ...directiveItems, ...macroItems, macroArgItem ];
+            return [
+                ...mnemonicItems,
+                ...registerItems,
+                ...directiveItems,
+                ...macroItems,
+                macroArgItem
+            ];
         }
     });
 
-    // Register all providers
     context.subscriptions.push(definitionProvider, hoverProvider, completionProvider);
 }
 

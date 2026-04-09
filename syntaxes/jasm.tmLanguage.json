@@ -21,8 +21,8 @@
         ]
       },
       {
-        "comment": "Directives: DATA, IMPORT",
-        "match": "\\b(?i)(DATA|IMPORT)\\b",
+        "comment": "Directives",
+        "match": "\\b(?i)(DATA|IMPORT|ORG|DEFINE|TIMES|ALIGN)\\b",
         "name": "keyword.control.directive.jasm"
       },
       {
@@ -58,11 +58,11 @@
       },
       {
         "comment": "Mnemonics (updated per language spec)",
-        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|INC|DEC|LSH|RSH|AND|OR|NOT|XOR|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|JN|JNN|JO|JNO|CALL|RET|INT|IRET|HALT|NOP)\\b",
+        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|MUL|MOD|DIV|INC|DEC|LSH|RSH|ASR|AND|OR|NOT|XOR|SWP|CLI|STI|STC|CLC|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|JA|JAE|JB|JBE|JG|JGE|JL|JLE|CALL|RET|INT|IRET|HALT|NOP)\\b",
         "name": "keyword.control.mnemonic.jasm"
       },
       {
-        "comment": "Memory operands: [reg], [pc + imm16], [imm16 + reg]",
+        "comment": "Memory operands",
         "begin": "\\[",
         "end": "\\]",
         "beginCaptures": {
@@ -89,8 +89,8 @@
         "name": "constant.numeric.hex.jasm"
       },
       {
-        "comment": "Numbers: Binary (Priority 20) - lowercase 'b' prefix",
-        "match": "\\bb[01]+\\b",
+        "comment": "Numbers: Binary (Priority 20)",
+        "match": "\\b0[bB][01]+\\b",
         "name": "constant.numeric.binary.jasm"
       },
       {
@@ -132,7 +132,7 @@
           },
           {
             "comment": "Numbers in memory operand",
-            "match": "\\b(0[xX][0-9a-fA-F]+|b[01]+|[0-9]+)\\b",
+            "match": "\\b(0[xX][0-9a-fA-F]+|0[bB][01]+|[0-9]+)\\b",
             "name": "constant.numeric.jasm"
           },
           {
@@ -173,7 +173,7 @@
           },
           {
             "comment": "Numbers in expressions",
-            "match": "\\b(0[xX][0-9a-fA-F]+|b[01]+|[0-9]+)\\b",
+            "match": "\\b(0[xX][0-9a-fA-F]+|0[bB][01]+|[0-9]+)\\b",
             "name": "constant.numeric.jasm"
           },
           {
