@@ -58,7 +58,7 @@
       },
       {
         "comment": "Mnemonics (updated per language spec)",
-        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|MUL|MOD|DIV|INC|DEC|LSH|RSH|ASR|AND|OR|NOT|XOR|SWP|CLI|STI|STC|CLC|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|JA|JAE|JB|JBE|JG|JGE|JL|JLE|CALL|RET|INT|IRET|HALT|NOP)\\b",
+        "match": "\\b(?i)(GET|PUT|MOV|PUSH|POP|ADD|ADC|SUB|SBC|MUL|MOD|DIV|INC|DEC|LSH|RSH|ASR|AND|OR|NOT|XOR|SWP|CLI|STI|STC|CLC|INB|OUTB|CMP|JMP|JZ|JNZ|JC|JNC|JA|JAE|JB|JBE|JG|JGE|JL|JLE|CALL|RET|INT|IRET|HALT|NOP|BCPY)\\b",
         "name": "keyword.control.mnemonic.jasm"
       },
       {
